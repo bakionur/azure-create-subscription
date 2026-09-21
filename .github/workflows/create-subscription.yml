@@ -1,0 +1,154 @@
+# =============================================================================
+# Create ONE Azure subscription in a target management group.
+#
+# No Terraform, no state, no config files. Manual dispatch only: it cannot fire
+# on push, PR or schedule.
+#
+# All logic lives in  scripts/New-AzureSubscription.ps1  so the same run can be
+# reproduced locally, by hand, with Connect-AzAccount.
+#
+# AUTH: the script performs the GitHub OIDC token exchange itself using
+# Az.Accounts, so this workflow needs no azure/login action and no Azure CLI.
+# Dispatched on the default branch with no `environment:`, the token subject is
+#   <prefix>:ref:refs/heads/<default-branch>
+# where <prefix> is repo:<org>/<repo>, or repo:<org>@<id>/<repo>@<id> on repositories
+# that use immutable subjects. The federated credential from README step 2 trusts
+# exactly that subject; nothing else is needed.
+#
+# SAFETY: mode defaults to `preflight` (read-only, creates nothing). Actually
+# creating a subscription needs mode=create AND the typed confirmation phrase,
+# because a subscription is a BILLED, tenant-level object that cannot be fully
+# deleted — only cancelled.
+#
+# Setup guide: README.md
+# =============================================================================
+name: create-subscription
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_name:
+        description: "Subscription display name (as it appears in the portal)"
+        type: string
+        required: true
+      management_group_id:
+        description: "Target management group id (e.g. landingzones). Must already exist."
+        type: string
+        required: true
+      mode:
+        description: "preflight = read-only checks, creates nothing · create = really create it (BILLED)"
+        type: choice
+        options: [preflight, create]
+        default: preflight
+      confirm:
+        description: 'Type "create-subscription" to authorise creation (ignored when mode=preflight)'
+        type: string
+        default: ""
+      billing_scope:
+        description: "EA or MCA billing scope. Blank = repo variable BILLING_SCOPE."
+        type: string
+        default: ""
+      alias_name:
+        description: "Alias name (PERMANENT, tenant-unique). Blank = derived from the display name."
+        type: string
+        default: ""
+      workload:
+        description: "Subscription workload type"
+        type: choice
+        options: [Production, DevTest]
+        default: Production
+      tags:
+        description: 'Tags as key=value,key=value (optional)'
+        type: string
+        default: ""
+
+permissions:
+  id-token: write # OIDC sign-in to Azure
+  contents: read
+
+concurrency:
+  # Serialise: two concurrent runs against the same billing scope get throttled
+  # and can race on the alias name.
+  group: create-subscription
+  cancel-in-progress: false
+
+jobs:
+  create:
+    name: ${{ inputs.mode == 'create' && 'Create subscription' || 'Preflight (read-only)' }}
+    runs-on: ubuntu-latest
+    steps:
+      # Free-text inputs are passed through `env:` and never interpolated into a
+      # shell line, so a value like  "; rm -rf /  cannot become a command.
+      - name: Guard - creation requires the typed phrase
+        if: inputs.mode == 'create'
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "create-subscription" ]; then
+            echo "::error title=Confirmation required::mode=create needs confirm to be exactly 'create-subscription'. Nothing was done."
+            exit 1
+          fi
+          echo "Confirmation accepted - a REAL, BILLED subscription will be created."
+
+      - name: Check the required repo variables exist
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          INPUT_SCOPE: ${{ inputs.billing_scope }}
+          VAR_SCOPE: ${{ vars.BILLING_SCOPE }}
+        run: |
+          MISSING=""
+          [ -n "$CLIENT_ID" ] || MISSING="$MISSING AZURE_CLIENT_ID"
+          [ -n "$TENANT_ID" ] || MISSING="$MISSING AZURE_TENANT_ID"
+          if [ -z "$INPUT_SCOPE" ] && [ -z "$VAR_SCOPE" ]; then
+            MISSING="$MISSING BILLING_SCOPE(or the billing_scope input)"
+          fi
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Missing configuration::Set these repo variables:$MISSING - see README.md"
+            exit 1
+          fi
+          echo "Configuration present."
+
+      - uses: actions/checkout@v4
+
+      - name: Run
+        id: run
+        shell: pwsh
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          IN_DISPLAY_NAME: ${{ inputs.display_name }}
+          IN_MG: ${{ inputs.management_group_id }}
+          IN_SCOPE: ${{ inputs.billing_scope }}
+          VAR_SCOPE: ${{ vars.BILLING_SCOPE }}
+          IN_ALIAS: ${{ inputs.alias_name }}
+          IN_WORKLOAD: ${{ inputs.workload }}
+          IN_TAGS: ${{ inputs.tags }}
+          IN_MODE: ${{ inputs.mode }}
+        run: |
+          $scope = if ($env:IN_SCOPE) { $env:IN_SCOPE } else { $env:VAR_SCOPE }
+
+          $splat = @{
+              DisplayName       = $env:IN_DISPLAY_NAME
+              BillingScope      = $scope
+              ManagementGroupId = $env:IN_MG
+              Workload          = $env:IN_WORKLOAD
+          }
+          if ($env:IN_ALIAS) { $splat.AliasName = $env:IN_ALIAS }
+          if ($env:IN_TAGS)  { $splat.Tags      = $env:IN_TAGS }
+          if ($env:IN_MODE -ne 'create') { $splat.PreflightOnly = $true }
+
+          ./scripts/New-AzureSubscription.ps1 @splat
+
+      - name: Report
+        if: always()
+        env:
+          MODE: ${{ inputs.mode }}
+          SUB_ID: ${{ steps.run.outputs.subscription_id }}
+        run: |
+          if [ -n "$SUB_ID" ]; then
+            echo "::notice title=Subscription created::$SUB_ID"
+          elif [ "$MODE" = "preflight" ]; then
+            echo "::notice title=Preflight only::No subscription was created."
+          fi
