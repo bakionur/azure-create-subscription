@@ -18,7 +18,7 @@
 # SAFETY: mode defaults to `preflight` (read-only, creates nothing). Actually
 # creating a subscription needs mode=create AND the typed confirmation phrase,
 # because a subscription is a BILLED, tenant-level object that cannot be fully
-# deleted — only cancelled.
+# deleted - only cancelled.
 #
 # Setup guide: README.md
 # =============================================================================
@@ -36,7 +36,7 @@ on:
         type: string
         required: true
       mode:
-        description: "preflight = read-only checks, creates nothing · create = really create it (BILLED)"
+        description: "preflight = read-only checks, creates nothing / create = really create it (BILLED)"
         type: choice
         options: [preflight, create]
         default: preflight

@@ -7,7 +7,7 @@
 .DESCRIPTION
     Deliberately standalone: no Terraform, no state, no dependency on any other
     file. It talks to the Azure REST API through the
-    Az.Accounts module only — there is NO Azure CLI dependency, so it runs on a
+    Az.Accounts module only - there is NO Azure CLI dependency, so it runs on a
     locked-down workstation as happily as on a GitHub runner.
 
     WHAT IT DOES, IN ORDER
@@ -30,7 +30,7 @@
     A subscription alias is a TENANT-LEVEL, IMMUTABLE name binding that OUTLIVES the
     subscription it created. Cancel a subscription and its alias remains. Reuse that
     alias name later and Azure silently hands back the OLD, CANCELLED subscription
-    with HTTP 200 instead of creating a new one — no error, no warning, and you only
+    with HTTP 200 instead of creating a new one - no error, no warning, and you only
     notice when deployments target a dead subscription. So this script refuses to
     proceed if the alias already exists, and tells you how to clear it.
 
@@ -49,7 +49,7 @@
 
 .PARAMETER AliasName
     Alias resource name. Defaults to a sanitised form of DisplayName.
-    Permanent and tenant-unique — see the warning above.
+    Permanent and tenant-unique - see the warning above.
 
 .PARAMETER Workload
     Production (default) or DevTest. DevTest requires an eligible billing scope.
@@ -65,7 +65,7 @@
     the GitHub OIDC environment variables are absent.
 
 .EXAMPLE
-    # Local dry run — read-only, proves permissions without spending anything
+    # Local dry run - read-only, proves permissions without spending anything
     Connect-AzAccount -Tenant <tenant-guid>
     ./New-AzureSubscription.ps1 -DisplayName 'Payments UK (dev)' `
         -BillingScope '/providers/Microsoft.Billing/billingAccounts/12345678/enrollmentAccounts/98765' `
@@ -214,14 +214,14 @@ Write-Info "agreement     : $agreement"
 Write-Info "workload      : $Workload"
 Write-Info "mode          : $(if ($PreflightOnly) { 'PREFLIGHT ONLY - nothing will be created' } else { 'CREATE' })"
 if ($agreement -eq 'UNKNOWN') {
-    Write-Warn 'Billing scope shape not recognised. Creation will probably fail — check the value against the examples in the README.'
+    Write-Warn 'Billing scope shape not recognised. Creation will probably fail - check the value against the examples in the README.'
 }
 
 # --------------------------------------------------------------- sign in ------
 Write-Head 'Sign in'
 
 if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-    Write-Info 'Az.Accounts not present — installing for the current user (no admin rights needed)'
+    Write-Info 'Az.Accounts not present - installing for the current user (no admin rights needed)'
     Install-Module Az.Accounts -Scope CurrentUser -Force -AllowClobber -Repository PSGallery
 }
 Import-Module Az.Accounts -ErrorAction Stop
@@ -276,7 +276,7 @@ foreach ($api in $BILLING_APIS) {
 if (-not $billingOk) {
     # Not fatal on EA: many enrollments deny reads to an SP that can still create.
     Write-Warn "could not read the billing scope. Expected role: $expectedRole"
-    Write-Warn 'On EA this is common and does NOT always mean creation will fail — the read and create permissions are separate.'
+    Write-Warn 'On EA this is common and does NOT always mean creation will fail - the read and create permissions are separate.'
 }
 
 # 2. Which billing roles does this identity hold? Informational only.
@@ -293,7 +293,7 @@ if ($roleRes.Ok -and $roleRes.Json -and $roleRes.Json.PSObject.Properties.Name -
     if ($names) { Write-Info "billing roles visible on this scope: $($names -join ', ')" }
     else        { Write-Info 'no billing role assignments returned (the API may hide them from a service principal)' }
 } else {
-    Write-Info 'billing role assignments not listable — skipping (normal for many EA enrollments)'
+    Write-Info 'billing role assignments not listable - skipping (normal for many EA enrollments)'
 }
 
 # 3. Target management group reachable?
@@ -309,7 +309,7 @@ if ($mgRes.Ok) {
     Write-Fail "cannot read management group '$mgName': $(Get-ArmError $mgRes)"
 }
 
-# 4. Is the alias name free? THE trap — see the header notes.
+# 4. Is the alias name free? THE trap - see the header notes.
 $aliasRes = Invoke-Arm -Path "/providers/Microsoft.Subscription/aliases/$AliasName`?api-version=$ALIAS_API"
 if ($aliasRes.StatusCode -eq 404) {
     Write-Ok "alias '$AliasName' is free"
@@ -328,17 +328,17 @@ if ($aliasRes.StatusCode -eq 404) {
     Write-Warn "could not check the alias: $(Get-ArmError $aliasRes)"
 }
 
-# 5. Display-name collision — a warning, never a blocker. Azure permits duplicates.
+# 5. Display-name collision - a warning, never a blocker. Azure permits duplicates.
 try {
     $clash = Get-AzSubscription -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $DisplayName }
     if ($clash) {
-        Write-Warn "a subscription named '$DisplayName' already exists ($($clash.Id -join ', ')). Azure allows duplicate display names — make sure this is intended."
+        Write-Warn "a subscription named '$DisplayName' already exists ($($clash.Id -join ', ')). Azure allows duplicate display names - make sure this is intended."
     }
 } catch { Write-Info 'display-name check skipped (cannot list subscriptions)' }
 
 if ($script:Failures.Count -gt 0) {
     Write-Head 'Result'
-    Write-Host '   PREFLIGHT FAILED — nothing was created.' -ForegroundColor Red
+    Write-Host '   PREFLIGHT FAILED - nothing was created.' -ForegroundColor Red
     Add-Summary "## Subscription creation: preflight FAILED`n"
     foreach ($f in $script:Failures) { Add-Summary "- $f" }
     exit 1
@@ -348,7 +348,7 @@ Write-Ok 'all preflight checks passed'
 
 if ($PreflightOnly) {
     Write-Head 'Result'
-    Write-Host '   PREFLIGHT ONLY — no subscription was created.' -ForegroundColor Yellow
+    Write-Host '   PREFLIGHT ONLY - no subscription was created.' -ForegroundColor Yellow
     Add-Summary "## Subscription creation: preflight passed`n"
     Add-Summary "Nothing was created (preflight-only mode)."
     Add-Summary "`n| Field | Value |`n|---|---|"
@@ -384,10 +384,10 @@ $create = Invoke-Arm -Method PUT -Path "/providers/Microsoft.Subscription/aliase
 if (-not $create.Ok) {
     Write-Fail "subscription creation was rejected: $(Get-ArmError $create)"
     switch ($create.StatusCode) {
-        401 { Write-Fail 'HTTP 401 — the OIDC sign-in did not produce a usable token.' }
-        403 { Write-Fail "HTTP 403 — the identity lacks '$expectedRole' on the billing scope. See the README, 'Grant the billing role'." }
-        400 { Write-Fail 'HTTP 400 — check the billing scope value, and that the billing account has subscription-creation quota left.' }
-        429 { Write-Fail 'HTTP 429 — throttled by the billing API. Wait a few minutes and retry.' }
+        401 { Write-Fail 'HTTP 401 - the OIDC sign-in did not produce a usable token.' }
+        403 { Write-Fail "HTTP 403 - the identity lacks '$expectedRole' on the billing scope. See the README, 'Grant the billing role'." }
+        400 { Write-Fail 'HTTP 400 - check the billing scope value, and that the billing account has subscription-creation quota left.' }
+        429 { Write-Fail 'HTTP 429 - throttled by the billing API. Wait a few minutes and retry.' }
     }
     Add-Summary "## Subscription creation FAILED`n`n``$(Get-ArmError $create)``"
     exit 1
@@ -405,7 +405,7 @@ $delay    = 10
 while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds $delay
     $poll = Invoke-Arm -Path "/providers/Microsoft.Subscription/aliases/$AliasName`?api-version=$ALIAS_API"
-    if (-not $poll.Ok) { Write-Info "poll returned HTTP $($poll.StatusCode) — retrying"; continue }
+    if (-not $poll.Ok) { Write-Info "poll returned HTTP $($poll.StatusCode) - retrying"; continue }
 
     $p = $poll.Json.properties
     $state = if ($p.PSObject.Properties.Name -contains 'provisioningState') { $p.provisioningState } else { 'Unknown' }
@@ -418,7 +418,7 @@ while ((Get-Date) -lt $deadline) {
 
 if ($state -ne 'Succeeded') {
     Write-Fail "provisioning did not succeed (last state: $state)."
-    if ($state -eq 'Unknown') { Write-Fail "Timed out after $TimeoutMinutes minutes. The subscription MAY still appear later — check the portal before retrying, and do NOT reuse the alias name blindly." }
+    if ($state -eq 'Unknown') { Write-Fail "Timed out after $TimeoutMinutes minutes. The subscription MAY still appear later - check the portal before retrying, and do NOT reuse the alias name blindly." }
     Add-Summary "## Subscription creation FAILED`n`nLast provisioning state: **$state**"
     exit 1
 }
@@ -433,12 +433,12 @@ $placed = $false
 for ($i = 1; $i -le 6; $i++) {
     $check = Invoke-Arm -Path "$mgFullId/subscriptions/$newSubId`?api-version=$MG_API"
     if ($check.Ok) { $placed = $true; break }
-    Write-Info "not visible under '$mgName' yet (attempt $i/6) — management group association can lag"
+    Write-Info "not visible under '$mgName' yet (attempt $i/6) - management group association can lag"
     Start-Sleep -Seconds 10
 }
 
 if (-not $placed) {
-    Write-Warn "not placed by the alias call — associating explicitly"
+    Write-Warn "not placed by the alias call - associating explicitly"
     $assoc = Invoke-Arm -Method PUT -Path "$mgFullId/subscriptions/$newSubId`?api-version=$MG_API"
     if ($assoc.Ok) { Write-Ok "associated with '$mgName'"; $placed = $true }
     else {
@@ -454,7 +454,7 @@ Write-Head 'Result'
 Write-Host "   Subscription ID : $newSubId" -ForegroundColor Green
 Write-Host "   Display name    : $DisplayName" -ForegroundColor Green
 Write-Host "   Alias           : $AliasName" -ForegroundColor Green
-Write-Host "   Management group: $mgName$(if (-not $placed) { '  (NOT PLACED — see above)' })" -ForegroundColor Green
+Write-Host "   Management group: $mgName$(if (-not $placed) { '  (NOT PLACED - see above)' })" -ForegroundColor Green
 
 Set-Output -Name 'subscription_id'   -Value $newSubId
 Set-Output -Name 'alias_name'        -Value $AliasName
@@ -470,9 +470,9 @@ Add-Summary "| Alias | ``$AliasName`` |"
 Add-Summary "| Management group | ``$mgName`` |"
 Add-Summary "| Agreement | $agreement |"
 Add-Summary "| Workload | $Workload |"
-Add-Summary "| Placed in MG | $(if ($placed) { 'yes' } else { '**NO — needs a manual move**' }) |"
+Add-Summary "| Placed in MG | $(if ($placed) { 'yes' } else { '**NO - needs a manual move**' }) |"
 Add-Summary ""
 Add-Summary "> The alias ``$AliasName`` is now permanently bound in this tenant. Cancelling the"
-Add-Summary "> subscription does not release it — delete the alias too if you ever want to reuse the name."
+Add-Summary "> subscription does not release it - delete the alias too if you ever want to reuse the name."
 
 exit 0

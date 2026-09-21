@@ -9,12 +9,12 @@
     account / enrollment. It is the single fiddliest step in the whole setup and the
     usual reason subscription creation fails with HTTP 403.
 
-    PowerShell + Az.Accounts only — no Azure CLI, so it runs on a locked-down machine.
+    PowerShell + Az.Accounts only - no Azure CLI, so it runs on a locked-down machine.
 
     It does NOT hardcode role GUIDs. Instead it LISTS the role definitions that exist
     at your billing scope and matches by name, because the ids differ between
     agreement types and enrollment vintages. If the role cannot be found or the grant
-    is refused, it prints the roles that DO exist plus the exact portal steps — which
+    is refused, it prints the roles that DO exist plus the exact portal steps - which
     is important, because many EA enrollments block billing-role writes over the API
     entirely and can only be changed in the EA portal.
 
@@ -182,7 +182,7 @@ Write-Ok "role definition: $roleDefId"
 Write-Head 'Assign'
 
 if (-not $PSCmdlet.ShouldProcess("$BillingScope", "grant '$wantedRole' to principal $ObjectId")) {
-    Write-Info 'WhatIf — nothing was changed.'
+    Write-Info 'WhatIf - nothing was changed.'
     exit 0
 }
 
@@ -230,9 +230,9 @@ if ($put.Ok) {
     exit 0
 }
 
-# 409 usually means "already assigned" — treat as success, it is what we wanted.
+# 409 usually means "already assigned" - treat as success, it is what we wanted.
 if ($put.StatusCode -eq 409) {
-    Write-Ok 'already assigned (HTTP 409) — nothing to do'
+    Write-Ok 'already assigned (HTTP 409) - nothing to do'
     exit 0
 }
 
