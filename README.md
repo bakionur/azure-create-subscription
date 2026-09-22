@@ -71,9 +71,17 @@ In the app registration, **Certificates & secrets > Federated credentials > Add 
 - **Classic prefix**: choose *GitHub Actions deploying Azure resources*. Organization =
   `<org>`, Repository = `<repo>`, Entity type = **Branch**, Branch = your default branch
   (`main`), Name = `gh-branch-main`.
-- **Immutable prefix** (contains `@`): the GitHub form cannot produce it. Choose
-  *Other issuer*: issuer `https://token.actions.githubusercontent.com`, subject
-  `<prefix>:ref:refs/heads/main`, audience `api://AzureADTokenExchange`.
+- **Immutable prefix** (contains `@`): the same *GitHub Actions* form, filling the
+  **Organization ID** and **Repository ID** fields as well. Both numbers are in the
+  prefix (`repo:<org>@<org-id>/<repo>@<repo-id>`), or individually:
+  `gh api orgs/<org> --jq .id` (a personal account: `gh api users/<user> --jq .id`) and
+  `gh api repos/<org>/<repo> --jq .id`. If your portal does not show the ID fields,
+  choose *Other issuer* instead: issuer `https://token.actions.githubusercontent.com`,
+  subject `<prefix>:ref:refs/heads/main`, audience `api://AzureADTokenExchange`.
+
+After saving, the credential's subject shown in the portal must equal the prefix plus
+`:ref:refs/heads/main`, byte for byte. On GitHub Enterprise **Server** the issuer is
+`https://<your-ghes-host>/_services/token`; GitHub Enterprise Cloud uses the issuer above.
 
 A `workflow_dispatch` run on the default branch with no environment presents exactly
 `<prefix>:ref:refs/heads/main`. Do not use a wildcard subject: Entra rejects them. If
