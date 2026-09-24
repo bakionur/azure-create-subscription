@@ -223,6 +223,7 @@ casually.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `The action actions/checkout@... is not allowed` | The organization or enterprise restricts Actions | The workflow's only action, `actions/checkout`, is created by GitHub and pinned to a full commit SHA, so it passes "GitHub + verified creators" and "require full-length SHA pins" policies. If yours allowlists specific actions instead, allow `actions/checkout`. |
 | `AADSTS700213` / no matching federated identity | The OIDC subject does not match the federated credential | Step 2. The error shows the subject GitHub sent; make the credential match it byte for byte (classic vs immutable prefix, org, repo, branch). Run from the default branch with no environment. |
 | `HTTP 403` on create | The service principal lacks the billing role | Step 3. If the API refuses the grant, use the portal route. |
 | `HTTP 400` on create | Wrong billing scope shape, or the billing account is out of subscription quota | Check the scope; check quota in the portal. |
